@@ -3,8 +3,9 @@
 #include <string.h>
 #include <time.h>
 
-#define REPEAT      100
-#define REPEAT_RAND 10
+#define REPEAT        100
+#define REPEAT_RAND   10
+#define REPEAT_STRIDE 10000
 
 /* Medir tiempo de acceso secuencial a un array de n_bytes */
 double bench_seq(size_t n_bytes) {
@@ -68,6 +69,29 @@ double bench_rand(size_t n_bytes) {
     return ns / (reps * (double)n);
 }
 
+/* Acceso con stride fijo: expone conflictos de asociatividad */
+double bench_stride(size_t n_bytes, size_t stride) {
+    volatile char *arr = (volatile char *)malloc(n_bytes);
+    if (!arr) return -1.0;
+    memset((void *)arr, 1, n_bytes);
+
+    size_t steps = n_bytes / stride;
+    struct timespec t0, t1;
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+
+    for (int r = 0; r < REPEAT_STRIDE; r++) {
+        for (size_t i = 0; i < steps; i++) {
+            (void)arr[(i * stride) % n_bytes];
+        }
+    }
+
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    free((void *)arr);
+
+    double ns = (t1.tv_sec - t0.tv_sec) * 1e9 + (t1.tv_nsec - t0.tv_nsec);
+    return ns / (REPEAT_STRIDE * (double)steps);
+}
+
 int main(void) {
     size_t sizes[] = {
         4 * 1024, 8 * 1024, 16 * 1024, 32 * 1024,         /* Region L1 (32 KiB) */
@@ -83,5 +107,12 @@ int main(void) {
         double lat_rnd = bench_rand(sizes[i]);
         printf("%-12zu  %12.3f  %14.3f\n", sizes[i] / 1024, lat_seq, lat_rnd);
     }
+
+    printf("\n=== Conflictos de Asociatividad (Array 1 MiB) ===\n");
+    printf("%-12s  %12s\n", "Stride", "ns/acceso");
+    double t_line = bench_stride(1024 * 1024, 64);
+    double t_page = bench_stride(1024 * 1024, 4096);
+    printf("%-12s  %12.3f\n", "64 B", t_line);
+    printf("%-12s  %12.3f\n", "4096 B", t_page);
     return 0;
 }
