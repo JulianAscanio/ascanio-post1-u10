@@ -1,0 +1,12 @@
+# Binarios compilados y objetos
+bin/
+*.o
+*.out
+
+# Scripts auxiliares locales
+render_caps.py
+__pycache__/
+
+# Entorno
+.vscode/
+.idea/
